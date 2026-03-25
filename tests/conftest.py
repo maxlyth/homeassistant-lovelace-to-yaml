@@ -8,6 +8,8 @@ import pytest
 
 # Allow tests to import lovelace_core directly (as pyscript would at runtime)
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "pyscript", "apps", "lovelace_to_yaml"))
+# Allow the pyscript_app fixture to import pyscript_mock from the same directory
+sys.path.insert(0, os.path.dirname(__file__))
 
 _APP_DIR = os.path.join(os.path.dirname(__file__), "..", "pyscript", "apps", "lovelace_to_yaml")
 _INIT_PY = os.path.join(_APP_DIR, "__init__.py")
@@ -56,7 +58,7 @@ def pyscript_app(config_dir, output_dir, streamline_templates_path, monkeypatch)
     Yields ``(module, log_proxy)`` where ``log_proxy`` is the :class:`LogProxy`
     instance bound as ``log`` so tests can assert on log output.
     """
-    from tests.pyscript_mock import (
+    from pyscript_mock import (
         LogProxy,
         PyscriptNamespace,
         event_trigger,
