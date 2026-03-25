@@ -1,0 +1,6 @@
+{
+  "name": "Lovelace to YAML",
+  "render_readme": true,
+  "type": "pyscript",
+  "version": "0.1.0"
+}

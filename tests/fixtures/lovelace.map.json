@@ -1,0 +1,26 @@
+{
+  "version": 1,
+  "minor_version": 1,
+  "key": "lovelace.map",
+  "data": {
+    "config": {
+      "views": [
+        {
+          "type": "panel",
+          "title": "Map",
+          "icon": "mdi:map",
+          "cards": [
+            {
+              "type": "map",
+              "auto_fit": true,
+              "entities": [
+                "person.example_user",
+                "zone.home"
+              ]
+            }
+          ]
+        }
+      ]
+    }
+  }
+}

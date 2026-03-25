@@ -1,0 +1,51 @@
+simple_button:
+  card:
+    type: custom:bubble-card
+    card_type: button
+    entity: "[[entity]]"
+    name: "[[name]]"
+
+with_defaults:
+  default:
+    - room: habitat
+    - columns: 1
+  card:
+    type: custom:bubble-card
+    entity: "climate.[[room]]_thermostat"
+    columns: "[[columns]]"
+
+with_javascript:
+  default:
+    - activity_entity: ""
+  card:
+    type: custom:bubble-card
+    card_type: button
+    entity: "[[activity_entity]]"
+    service_javascript: |-
+      return states['[[activity_entity]]']?.attributes?.action_entity;
+
+nested_outer:
+  card:
+    type: vertical-stack
+    cards:
+      - type: custom:streamline-card
+        template: with_defaults
+        variables:
+          - room: bedroom
+      - type: custom:streamline-card
+        template: simple_button
+        variables:
+          entity: light.kitchen
+          name: Kitchen
+
+circular_a:
+  card:
+    type: custom:streamline-card
+    template: circular_b
+    variables: {}
+
+circular_b:
+  card:
+    type: custom:streamline-card
+    template: circular_a
+    variables: {}

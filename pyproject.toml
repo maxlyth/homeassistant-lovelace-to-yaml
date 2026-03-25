@@ -1,0 +1,30 @@
+[project]
+name = "homeassistant-lovelace-to-yaml"
+version = "0.1.0"
+description = "Auto-convert Home Assistant Lovelace dashboards from JSON to YAML for version control"
+requires-python = ">=3.11"
+readme = "README.md"
+license = {text = "MIT"}
+authors = [{name = "Max Lyth"}]
+classifiers = [
+    "Programming Language :: Python :: 3",
+    "License :: OSI Approved :: MIT License",
+    "Topic :: Home Automation",
+]
+
+[project.urls]
+Repository = "https://github.com/maxlyth/homeassistant-lovelace-to-yaml"
+
+[project.optional-dependencies]
+dev = ["pytest>=7.0", "pytest-cov", "ruamel.yaml"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools.packages.find]
+where = ["pyscript/apps"]
+include = ["lovelace_to_yaml*"]
