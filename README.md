@@ -4,7 +4,11 @@
 [![HACS](https://img.shields.io/badge/HACS-Custom-orange.svg)](https://hacs.xyz)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 
-Automatically converts your Home Assistant Lovelace dashboard configurations from JSON to readable YAML whenever you save a dashboard in the UI. The YAML files are easy to read, diff, and commit to version control.
+Automatically converts your Home Assistant Lovelace dashboard configurations from JSON to readable YAML whenever you save a dashboard in the UI. The primary goals of this plugin are:
+1. Improve performance of dashboards on low-compute panels such as SONOFF NSPanel and other Android 8 class devices.
+2. The YAML files are easy to read, diff, and commit to version control.
+3. During conversion, any aspect of [StreamLine templates](https://github.com/brunosabot/streamline-card) are statically rendered and flatterned, significantly improving dashboard responsiveness.
+4. YAML dashboards files can be copied to a lighweight HA instance that mirrors a primary HA with [HA remote](https://github.com/custom-components/remote_homeassistant)
 
 ## How it works
 
@@ -17,7 +21,7 @@ lovelace_updated event fires
         ↓
 lovelace_to_yaml reads .storage/lovelace.<id>
         ↓
-Extracts data.config, converts to YAML
+Extracts data.config, converts to YAML and pre-renders Streamline templates
         ↓
 Writes lovelace_<id>.yaml to OUTPUT_DIR
 ```
