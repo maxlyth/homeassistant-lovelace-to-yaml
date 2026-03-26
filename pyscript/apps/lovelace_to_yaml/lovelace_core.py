@@ -52,6 +52,45 @@ def get_lovelace_id_from_url(url: str | None, storage_dir: str) -> str:
     return match["id"]
 
 
+def list_dashboard_urls(storage_dir: str) -> list:
+    """Return all dashboard url_paths from the registry, plus None for the default.
+
+    None represents the default dashboard (fixed storage ID "lovelace"), which
+    is always present but has no registry entry.  Registered dashboards follow.
+
+    If the registry file is missing or malformed, returns [None] so callers
+    still process the default dashboard.
+    """
+    urls = [None]
+    try:
+        registry_path = os.path.join(storage_dir, "lovelace_dashboards")
+        with open(registry_path, encoding="utf-8") as f:
+            data = json.load(f)
+        for item in data["data"]["items"]:
+            urls.append(item["url_path"])
+    except Exception:
+        pass
+    return urls
+
+
+def dashboard_uses_streamline(url, storage_dir: str) -> bool:
+    """Return True if the dashboard's storage file references custom:streamline-card.
+
+    Uses a raw string search rather than JSON parsing — the type identifier is
+    distinctive enough that false positives are not possible in HA storage JSON
+    (no comments, entity IDs use dots not colons).
+
+    Returns False on any error (unknown url_path, missing storage file, etc.).
+    """
+    try:
+        dashboard_id = get_lovelace_id_from_url(url, storage_dir)
+        storage_path = os.path.join(storage_dir, f"lovelace.{dashboard_id}")
+        with open(storage_path, encoding="utf-8") as f:
+            return "custom:streamline-card" in f.read()
+    except Exception:
+        return False
+
+
 def extract_dashboard_config(json_data: dict) -> dict:
     """Extract the dashboard config from a HA .storage file envelope."""
     return json_data["data"]["config"]

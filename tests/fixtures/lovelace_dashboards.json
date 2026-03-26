@@ -20,6 +20,14 @@
         "mode": "storage",
         "require_admin": false,
         "show_in_sidebar": true
+      },
+      {
+        "id": "streamline_dash",
+        "title": "Streamline Test",
+        "url_path": "streamline-dash",
+        "mode": "storage",
+        "require_admin": false,
+        "show_in_sidebar": true
       }
     ]
   }

@@ -18,9 +18,11 @@ from lovelace_core import (
     _substitute_variables,
     convert_dashboard,
     convert_to_yaml,
+    dashboard_uses_streamline,
     expand_streamline_cards,
     extract_dashboard_config,
     get_lovelace_id_from_url,
+    list_dashboard_urls,
     load_streamline_templates,
 )
 
@@ -50,6 +52,66 @@ def test_get_id_missing_registry_raises(tmp_path):
     """A missing registry file should raise FileNotFoundError."""
     with pytest.raises(FileNotFoundError):
         get_lovelace_id_from_url("map", str(tmp_path))
+
+
+# ── list_dashboard_urls ───────────────────────────────────────────────────────
+
+def test_list_dashboard_urls_includes_default_and_registered(config_dir):
+    storage_dir = os.path.join(config_dir, ".storage")
+    urls = list_dashboard_urls(storage_dir)
+    assert None in urls
+    assert "map" in urls
+    assert "office-panel" in urls
+    assert "streamline-dash" in urls
+
+
+def test_list_dashboard_urls_default_is_first(config_dir):
+    storage_dir = os.path.join(config_dir, ".storage")
+    urls = list_dashboard_urls(storage_dir)
+    assert urls[0] is None
+
+
+def test_list_dashboard_urls_missing_registry_returns_default_only(tmp_path):
+    urls = list_dashboard_urls(str(tmp_path))
+    assert urls == [None]
+
+
+def test_list_dashboard_urls_empty_registry(tmp_path):
+    storage = tmp_path / ".storage"
+    storage.mkdir()
+    (storage / "lovelace_dashboards").write_text(
+        '{"version":1,"minor_version":1,"key":"lovelace_dashboards","data":{"items":[]}}',
+        encoding="utf-8",
+    )
+    urls = list_dashboard_urls(str(storage))
+    assert urls == [None]
+
+
+# ── dashboard_uses_streamline ─────────────────────────────────────────────────
+
+def test_dashboard_uses_streamline_true_for_streamline_dashboard(config_dir):
+    storage_dir = os.path.join(config_dir, ".storage")
+    assert dashboard_uses_streamline("streamline-dash", storage_dir) is True
+
+
+def test_dashboard_uses_streamline_false_for_plain_dashboard(config_dir):
+    storage_dir = os.path.join(config_dir, ".storage")
+    assert dashboard_uses_streamline("map", storage_dir) is False
+
+
+def test_dashboard_uses_streamline_false_for_default_dashboard(config_dir):
+    storage_dir = os.path.join(config_dir, ".storage")
+    assert dashboard_uses_streamline(None, storage_dir) is False
+
+
+def test_dashboard_uses_streamline_false_for_missing_storage_file(config_dir):
+    storage_dir = os.path.join(config_dir, ".storage")
+    assert dashboard_uses_streamline("office-panel", storage_dir) is False
+
+
+def test_dashboard_uses_streamline_false_for_unknown_url(config_dir):
+    storage_dir = os.path.join(config_dir, ".storage")
+    assert dashboard_uses_streamline("no-such-dashboard", storage_dir) is False
 
 
 # ── extract_dashboard_config ──────────────────────────────────────────────────

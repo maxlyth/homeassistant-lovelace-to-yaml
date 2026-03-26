@@ -1,0 +1,21 @@
+{
+  "version": 1,
+  "minor_version": 1,
+  "key": "lovelace.streamline_dash",
+  "data": {
+    "config": {
+      "views": [
+        {
+          "title": "Streamline Test",
+          "cards": [
+            {
+              "type": "custom:streamline-card",
+              "template": "btn",
+              "variables": {"entity": "light.kitchen"}
+            }
+          ]
+        }
+      ]
+    }
+  }
+}
