@@ -114,6 +114,19 @@ If the templates file doesn't exist, expansion is silently skipped — the app w
 
 Template properties with `_javascript` suffixes (e.g. `service_javascript`, `icon_color_javascript`) are kept in the YAML output with `[[variable]]` placeholders substituted, but they require the Streamline runtime to execute. They appear in the YAML for readability.
 
+### Automatic reconversion on template changes
+
+When you edit `streamline_templates.yaml` manually, any dashboards using Streamline cards will be stale until the next UI save. To fix this automatically, enable HA's built-in `folder_watcher` integration to watch the templates file:
+
+```yaml
+folder_watcher:
+  - folder: /config/www/community/streamline-card
+    patterns:
+      - "streamline_templates.yaml"
+```
+
+Add this to `configuration.yaml` and restart HA. After that, editing `streamline_templates.yaml` will automatically trigger reconversion of all dashboards that reference Streamline cards — dashboards without Streamline cards are unaffected.
+
 ## Limitations
 
 - Only works with dashboards in **storage mode**. Dashboards configured via YAML files in `/config/` are not affected.

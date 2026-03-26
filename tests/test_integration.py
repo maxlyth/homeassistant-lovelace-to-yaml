@@ -148,3 +148,79 @@ def test_service_with_none_converts_default(pyscript_app, output_dir):
     mod, _ = pyscript_app
     mod.lovelace_convert(url=None)
     assert os.path.exists(os.path.join(output_dir, "lovelace_lovelace.yaml"))
+
+
+# ── E. streamline_templates_changed (folder_watcher handler) ─────────────────
+
+
+def test_folder_watcher_event_trigger_registered(pyscript_app):
+    """@event_trigger must record 'folder_watcher' on the handler."""
+    mod, _ = pyscript_app
+    assert hasattr(mod.streamline_templates_changed, "_event_trigger")
+    assert mod.streamline_templates_changed._event_trigger == "folder_watcher"
+
+
+def test_folder_watcher_converts_streamline_dashboards(pyscript_app, output_dir):
+    """Matching event must reconvert dashboards that use custom:streamline-card."""
+    mod, _ = pyscript_app
+    mod.streamline_templates_changed(
+        path="/config/www/community/streamline-card/streamline_templates.yaml",
+        event_type="modified",
+    )
+    assert os.path.exists(os.path.join(output_dir, "lovelace_streamline_dash.yaml"))
+
+
+def test_folder_watcher_does_not_convert_plain_dashboards(pyscript_app, output_dir):
+    """Reconvert must skip dashboards with no custom:streamline-card reference."""
+    mod, _ = pyscript_app
+    mod.streamline_templates_changed(
+        path="/config/www/community/streamline-card/streamline_templates.yaml",
+        event_type="modified",
+    )
+    assert not os.path.exists(os.path.join(output_dir, "lovelace_map.yaml"))
+    assert not os.path.exists(os.path.join(output_dir, "lovelace_lovelace.yaml"))
+
+
+def test_folder_watcher_ignores_unrelated_files(pyscript_app, output_dir):
+    """Events for other files must not trigger reconversion."""
+    mod, _ = pyscript_app
+    mod.streamline_templates_changed(path="/config/some_other_file.yaml", event_type="modified")
+    assert not any(os.listdir(output_dir))
+
+
+def test_folder_watcher_ignores_deleted_event(pyscript_app, output_dir):
+    """'deleted' event_type must not trigger reconversion."""
+    mod, _ = pyscript_app
+    mod.streamline_templates_changed(
+        path="/config/www/community/streamline-card/streamline_templates.yaml",
+        event_type="deleted",
+    )
+    assert not any(os.listdir(output_dir))
+
+
+def test_folder_watcher_handles_closed_event(pyscript_app, output_dir):
+    """'closed' event_type (vim-style save) must trigger reconversion."""
+    mod, _ = pyscript_app
+    mod.streamline_templates_changed(
+        path="/config/www/community/streamline-card/streamline_templates.yaml",
+        event_type="closed",
+    )
+    assert os.path.exists(os.path.join(output_dir, "lovelace_streamline_dash.yaml"))
+
+
+def test_folder_watcher_logs_via_pyscript_log(pyscript_app):
+    """streamline_templates_changed must call log.info (pyscript global)."""
+    mod, log_proxy = pyscript_app
+    mod.streamline_templates_changed(
+        path="/config/www/community/streamline-card/streamline_templates.yaml",
+        event_type="modified",
+    )
+    assert any("streamline_templates.yaml" in msg for msg in log_proxy.messages("info"))
+
+
+def test_reconvert_uses_stdlib_logging_not_pyscript_log(pyscript_app):
+    """_reconvert_streamline_dashboards must use _LOGGER, not log."""
+    src = inspect.getsource(pyscript_app[0]._reconvert_streamline_dashboards)
+    assert "_LOGGER" in src
+    assert "log.info" not in src
+    assert "log.error" not in src

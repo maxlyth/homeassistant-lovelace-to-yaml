@@ -24,7 +24,7 @@ def config_dir(tmp_path):
     """Temporary HA config directory pre-populated with fixture storage files."""
     storage = tmp_path / ".storage"
     storage.mkdir()
-    for name in ["lovelace_dashboards", "lovelace.map", "lovelace.lovelace"]:
+    for name in ["lovelace_dashboards", "lovelace.map", "lovelace.lovelace", "lovelace.streamline_dash"]:
         src = os.path.join(FIXTURES_DIR, f"{name}.json")
         (storage / name).write_text(
             open(src, encoding="utf-8").read(), encoding="utf-8"
