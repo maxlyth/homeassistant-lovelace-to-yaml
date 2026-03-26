@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.2.0] - 2026-03-26
+
+### Added
+
+- Automatic reconversion of Streamline dashboards when `streamline_templates.yaml` changes on disk, via HA's `folder_watcher` integration
+- Only dashboards that reference `custom:streamline-card` are reconverted — plain dashboards are unaffected
+- `closed` event type support so editors that write via temp-file rename (e.g. vim) are detected correctly
+
 ## [0.1.0] - 2026-03-25
 
 Initial release.
