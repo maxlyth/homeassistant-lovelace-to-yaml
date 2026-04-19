@@ -49,6 +49,26 @@ def service(fn):
     return fn
 
 
+class TaskProxy:
+    """Mock for the ``task`` built-in used in pyscript async contexts.
+
+    In the real runtime, ``task.unique(name)`` cancels any running task with
+    the same name and claims the name for the caller, and ``task.sleep(s)``
+    suspends the caller for s seconds.  In tests we don't actually sleep —
+    we just record calls so tests can assert on the wiring.
+    """
+
+    def __init__(self):
+        self.unique_calls = []
+        self.sleep_calls = []
+
+    def unique(self, name, kill_me=False):
+        self.unique_calls.append(name)
+
+    def sleep(self, seconds):
+        self.sleep_calls.append(seconds)
+
+
 class LogProxy:
     """Mock for the ``log`` built-in used in pyscript async contexts.
 

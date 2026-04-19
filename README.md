@@ -58,6 +58,11 @@ All keys under `lovelace_to_yaml:` are optional — the values above are the def
 | `config_dir` | `/config` | Path to your HA config directory |
 | `output_dir` | `/config/lovelace_yaml` | Directory where YAML files are written |
 | `streamline_templates_path` | `/config/www/community/streamline-card/streamline_templates.yaml` | Path to Streamline Card templates (see below) |
+| `debounce_seconds` | `10` | Delay between a dashboard save and the YAML conversion (see below) |
+
+### Why is there a delay before the YAML updates?
+
+HA's `LovelaceStorage` debounces its on-disk writes, which means the `lovelace_updated` event can fire *before* the new JSON has actually landed in `.storage/`. If we converted immediately we would read stale content. The `debounce_seconds` delay ensures we read the final state. It also coalesces rapid successive saves (e.g. dragging cards around) into a single conversion, rather than producing churn in your version-controlled output. The default 10 s is safely longer than HA's internal debounce; tune lower only if you understand HA's save timing.
 
 ### Why `allow_all_imports: true`?
 

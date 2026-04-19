@@ -61,12 +61,14 @@ def pyscript_app(config_dir, output_dir, streamline_templates_path, monkeypatch)
     from pyscript_mock import (
         LogProxy,
         PyscriptNamespace,
+        TaskProxy,
         event_trigger,
         pyscript_executor,
         service,
     )
 
     log_proxy = LogProxy()
+    task_proxy = TaskProxy()
     ns = PyscriptNamespace(
         app_config={
             "config_dir": config_dir,
@@ -81,6 +83,7 @@ def pyscript_app(config_dir, output_dir, streamline_templates_path, monkeypatch)
     monkeypatch.setattr(builtins, "event_trigger", event_trigger, raising=False)
     monkeypatch.setattr(builtins, "service", service, raising=False)
     monkeypatch.setattr(builtins, "log", log_proxy, raising=False)
+    monkeypatch.setattr(builtins, "task", task_proxy, raising=False)
 
     # Remove any cached module so each fixture call gets a fresh import.
     sys.modules.pop(_INTEGRATION_MOD_NAME, None)
@@ -90,6 +93,17 @@ def pyscript_app(config_dir, output_dir, streamline_templates_path, monkeypatch)
     sys.modules[_INTEGRATION_MOD_NAME] = mod
     spec.loader.exec_module(mod)
 
+    # Stash task_proxy on the module so dedicated tests can retrieve it via a
+    # separate fixture without breaking the existing (mod, log_proxy) contract.
+    mod._test_task_proxy = task_proxy
+
     yield mod, log_proxy
 
     sys.modules.pop(_INTEGRATION_MOD_NAME, None)
+
+
+@pytest.fixture
+def task_proxy(pyscript_app):
+    """Retrieve the TaskProxy instance bound as ``task`` during pyscript_app setup."""
+    mod, _ = pyscript_app
+    return mod._test_task_proxy

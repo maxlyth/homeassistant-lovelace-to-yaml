@@ -14,6 +14,11 @@ STREAMLINE_TEMPLATES_PATH = _cfg.get(
     "streamline_templates_path",
     "/config/www/community/streamline-card/streamline_templates.yaml",
 )
+# Debounce window for lovelace_updated events, in seconds.  HA's LovelaceStorage
+# debounces its own disk write, so an event can fire before the new JSON has
+# landed on disk.  Waiting longer than that window ensures we read the final
+# state.  Also coalesces rapid successive saves into a single conversion.
+DEBOUNCE_SECONDS = float(_cfg.get("debounce_seconds", 10))
 
 # Load lovelace_core as a plain Python module via importlib so that its
 # functions remain regular Python callables (not pyscript-wrapped coroutines).
@@ -69,8 +74,15 @@ def _reconvert_streamline_dashboards():
 # ── Triggers ──────────────────────────────────────────────────────────────────
 
 @event_trigger(EVENT_LOVELACE_UPDATED)
-def lovelace_updated_event(url_path=None):
-    log.info(f"lovelace_to_yaml: lovelace_updated event (url_path={url_path!r})")
+def lovelace_updated_event(url_path=None, **_ignored):
+    # Debounce: rapid successive saves for the same dashboard collapse into one
+    # conversion that runs after HA has flushed the final state to disk.
+    task.unique(f"lovelace_to_yaml_convert_{url_path}")
+    log.info(
+        f"lovelace_to_yaml: lovelace_updated event (url_path={url_path!r}), "
+        f"debouncing {DEBOUNCE_SECONDS}s"
+    )
+    task.sleep(DEBOUNCE_SECONDS)
     _do_convert(url_path)
 
 

@@ -127,6 +127,108 @@ def test_event_handler_logs_via_pyscript_log(pyscript_app):
     assert any("lovelace_updated" in msg for msg in log_proxy.messages("info"))
 
 
+def test_event_handler_debounces_via_task_unique(pyscript_app, task_proxy):
+    """lovelace_updated_event must call task.unique per-url_path for coalescing.
+
+    This is the core of the stale-read fix (issue #3): rapid successive saves
+    for the same dashboard must collapse into a single conversion that runs
+    after HA's Store debounce has flushed the final state to disk.
+    """
+    mod, _ = pyscript_app
+    mod.lovelace_updated_event(url_path="map")
+    assert task_proxy.unique_calls == ["lovelace_to_yaml_convert_map"]
+
+
+def test_event_handler_sleeps_before_converting(pyscript_app, task_proxy):
+    """lovelace_updated_event must task.sleep before calling _do_convert.
+
+    The sleep must exceed HA's LovelaceStorage disk-write debounce so the
+    executor reads the final JSON, not a stale pre-write state.
+    """
+    mod, _ = pyscript_app
+    mod.lovelace_updated_event(url_path="map")
+    assert len(task_proxy.sleep_calls) == 1
+    assert task_proxy.sleep_calls[0] == mod.DEBOUNCE_SECONDS
+    # The debounce must be long enough to clear HA's default Store debounce.
+    assert mod.DEBOUNCE_SECONDS >= 5
+
+
+def test_event_handler_uses_distinct_unique_name_per_url(pyscript_app, task_proxy):
+    """Different url_paths must get distinct task.unique names so they don't
+    cancel each other's debounce timers."""
+    mod, _ = pyscript_app
+    mod.lovelace_updated_event(url_path="map")
+    mod.lovelace_updated_event(url_path=None)
+    assert task_proxy.unique_calls == [
+        "lovelace_to_yaml_convert_map",
+        "lovelace_to_yaml_convert_None",
+    ]
+
+
+def test_event_handler_accepts_unknown_kwargs(pyscript_app):
+    """lovelace_updated_event must tolerate extra event-data kwargs from HA.
+
+    HA's REST API and future HA versions may attach additional event data
+    fields to ``lovelace_updated``.  The handler must accept and ignore them,
+    otherwise it raises TypeError and the conversion never runs.
+    """
+    mod, _ = pyscript_app
+    # Must not raise
+    mod.lovelace_updated_event(url_path="map", unexpected_extra="value")
+
+
+def test_debounce_seconds_configurable_via_app_config(monkeypatch, config_dir, output_dir, streamline_templates_path):
+    """debounce_seconds in app_config must override the default."""
+    import builtins
+    import importlib.util
+    import sys
+
+    from pyscript_mock import (
+        LogProxy,
+        PyscriptNamespace,
+        TaskProxy,
+        event_trigger,
+        pyscript_executor,
+        service,
+    )
+
+    ns = PyscriptNamespace(
+        app_config={
+            "config_dir": config_dir,
+            "output_dir": output_dir,
+            "streamline_templates_path": streamline_templates_path,
+            "core_module_path": os.path.abspath(os.path.join(
+                os.path.dirname(__file__), "..", "pyscript", "apps",
+                "lovelace_to_yaml", "lovelace_core.py",
+            )),
+            "debounce_seconds": 3.5,
+        }
+    )
+    monkeypatch.setattr(builtins, "pyscript", ns, raising=False)
+    monkeypatch.setattr(builtins, "pyscript_executor", pyscript_executor, raising=False)
+    monkeypatch.setattr(builtins, "event_trigger", event_trigger, raising=False)
+    monkeypatch.setattr(builtins, "service", service, raising=False)
+    monkeypatch.setattr(builtins, "log", LogProxy(), raising=False)
+    monkeypatch.setattr(builtins, "task", TaskProxy(), raising=False)
+
+    sys.modules.pop("lovelace_to_yaml_integration_cfg", None)
+    init_py = os.path.join(
+        os.path.dirname(__file__), "..", "pyscript", "apps",
+        "lovelace_to_yaml", "__init__.py",
+    )
+    spec = importlib.util.spec_from_file_location(
+        "lovelace_to_yaml_integration_cfg", os.path.abspath(init_py)
+    )
+    mod = importlib.util.module_from_spec(spec)
+    sys.modules["lovelace_to_yaml_integration_cfg"] = mod
+    spec.loader.exec_module(mod)
+
+    try:
+        assert mod.DEBOUNCE_SECONDS == 3.5
+    finally:
+        sys.modules.pop("lovelace_to_yaml_integration_cfg", None)
+
+
 # ── D. lovelace_convert (service) ────────────────────────────────────────────
 
 
