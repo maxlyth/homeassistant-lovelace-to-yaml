@@ -1,6 +1,6 @@
 [project]
 name = "homeassistant-lovelace-to-yaml"
-version = "0.1.0"
+version = "0.2.1"
 description = "Auto-convert Home Assistant Lovelace dashboards from JSON to YAML for version control"
 requires-python = ">=3.11"
 readme = "README.md"
