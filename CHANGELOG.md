@@ -1,5 +1,11 @@
 # Changelog
 
+## [0.2.2] - 2026-05-20
+
+### Fixed
+
+- String values whose content matches a YAML 1.1 boolean keyword (`on`, `off`, `yes`, `no`, `true`, `false`, `y`, `n`, case-insensitive) are now force-quoted in the converted YAML output. Home Assistant parses YAML files as YAML 1.1, where those bare keywords coerce to booleans on load. Previously, a streamline template carrying `trigger_state: "on"` would emit unquoted `on` after expansion (because `expand_streamline_cards` collapses ruamel.yaml's quote-preserving scalar string types to plain `str` via `copy.deepcopy`), and HA would parse that back as boolean `True` — breaking any consumer doing strict-equality comparison against the string state of a binary_sensor (e.g. Bubble Card's pop-up `trigger_state`). The fix is a custom string representer added to the YAML serialiser; `preserve_quotes=True` alone is insufficient because the deepcopy strips the scalar-type metadata.
+
 ## [0.2.1] - 2026-04-19
 
 ### Fixed

@@ -16,9 +16,36 @@ import ruamel.yaml
 DEFAULT_DASHBOARD_ID = "lovelace"
 
 
+_YAML_1_1_BOOL_KEYWORDS = frozenset({
+    "on", "off", "yes", "no", "true", "false",
+    "y", "n",
+})
+
+
+def _quote_yaml11_keywords(representer, data):
+    """Force-quote strings whose value is a YAML 1.1 boolean keyword.
+
+    Home Assistant parses YAML files as YAML 1.1, where unquoted ``on``,
+    ``off``, ``yes``, ``no``, ``true``, ``false`` (and a few others) become
+    booleans, not strings. ruamel.yaml is YAML 1.2 by default and emits these
+    values unquoted. The ``expand_streamline_cards`` pipeline collapses
+    ruamel ScalarString types to plain ``str`` via ``copy.deepcopy`` + ``dict()``,
+    so ``preserve_quotes`` is insufficient on its own.
+
+    Without this representer, a streamline template containing
+    ``trigger_state: "on"`` would emit unquoted ``on`` and be parsed back as
+    boolean ``True`` — breaking, for example, Bubble Card's strict-equality
+    trigger comparison against an entity's "on" string state.
+    """
+    style = '"' if data.lower() in _YAML_1_1_BOOL_KEYWORDS else None
+    return representer.represent_scalar("tag:yaml.org,2002:str", data, style=style)
+
+
 def _make_yaml() -> ruamel.yaml.YAML:
     y = ruamel.yaml.YAML()
     y.default_flow_style = False
+    y.preserve_quotes = True
+    y.representer.add_representer(str, _quote_yaml11_keywords)
     return y
 
 

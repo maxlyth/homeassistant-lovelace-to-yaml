@@ -162,6 +162,60 @@ def test_convert_to_yaml_preserves_key_insertion_order():
     assert keys == ["z_last", "a_first", "m_middle"]
 
 
+def test_convert_to_yaml_quotes_yaml11_boolean_keywords():
+    """String values that are YAML 1.1 boolean keywords must be quoted.
+
+    HA Core parses YAML 1.1 — unquoted `on`/`off`/`yes`/`no`/`true`/`false`
+    become booleans. Strings carrying these literal values must round-trip
+    as strings, not boolean coercions.
+    """
+    data = {
+        "trigger_state": "on",
+        "fallback_state": "off",
+        "consent_yes": "yes",
+        "consent_no": "no",
+        "literal_true": "true",
+        "literal_false": "false",
+        "short_y": "y",
+        "short_n": "n",
+        "normal_string": "hello",
+        "actual_bool": True,
+    }
+    yaml_str = convert_to_yaml(data)
+    # Each YAML-1.1-keyword string value must appear quoted.
+    for keyword in ("on", "off", "yes", "no", "true", "false", "y", "n"):
+        assert f': "{keyword}"' in yaml_str, (
+            f"Expected '{keyword}' to be quoted; got:\n{yaml_str}"
+        )
+    # Non-keyword strings stay plain.
+    assert "normal_string: hello" in yaml_str
+    # Actual booleans stay as booleans.
+    assert "actual_bool: true" in yaml_str
+
+    # Round-trip through a YAML 1.1 loader: every string value comes back as a string.
+    yaml11 = ruamel.yaml.YAML()
+    yaml11.version = (1, 1)
+    parsed = yaml11.load(yaml_str)
+    for k in (
+        "trigger_state", "fallback_state", "consent_yes", "consent_no",
+        "literal_true", "literal_false", "short_y", "short_n",
+    ):
+        assert isinstance(parsed[k], str), (
+            f"{k}: expected str, got {type(parsed[k]).__name__} ({parsed[k]!r})"
+        )
+    assert parsed["actual_bool"] is True
+
+
+def test_convert_to_yaml_keyword_quoting_case_insensitive():
+    """YAML 1.1 boolean coercion is case-insensitive — On/OFF/Yes etc. also coerce."""
+    data = {"a": "On", "b": "OFF", "c": "Yes", "d": "NO", "e": "True", "f": "FALSE"}
+    yaml_str = convert_to_yaml(data)
+    for value in ("On", "OFF", "Yes", "NO", "True", "FALSE"):
+        assert f': "{value}"' in yaml_str, (
+            f"Expected '{value}' to be quoted; got:\n{yaml_str}"
+        )
+
+
 def test_convert_to_yaml_output_is_block_style_not_flow():
     data = {"views": [{"cards": [{"type": "map"}]}]}
     yaml_str = convert_to_yaml(data)
