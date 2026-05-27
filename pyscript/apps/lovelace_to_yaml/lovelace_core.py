@@ -130,13 +130,71 @@ def convert_to_yaml(data: dict) -> str:
     return buf.getvalue()
 
 
-def load_streamline_templates(path: str) -> dict | None:
-    """Load streamline templates YAML. Returns None if file is missing or invalid."""
+_include_dir_stack: list[str] = []
+
+
+def _include_constructor(loader, node):
+    """Resolve a `!include path` tag. Path is relative to the currently-loading file.
+
+    Reads the active base_dir from `_include_dir_stack` rather than a closure,
+    because ruamel.yaml's `add_constructor` registers on a class-level mapping
+    shared across YAML instances. The stack is pushed/popped per file load.
+    """
+    rel = loader.construct_scalar(node)
+    base_dir = _include_dir_stack[-1] if _include_dir_stack else ""
+    target = os.path.normpath(os.path.join(base_dir, rel))
+    target_dir = os.path.dirname(target)
+    _include_dir_stack.append(target_dir)
     try:
-        with open(path, encoding="utf-8") as f:
-            return _make_yaml().load(f)
-    except Exception:
+        with open(target, encoding="utf-8") as f:
+            return _make_yaml_with_includes().load(f)
+    finally:
+        _include_dir_stack.pop()
+
+
+def _make_yaml_with_includes() -> ruamel.yaml.YAML:
+    """Return a ruamel YAML instance that resolves `!include path` tags.
+
+    Paths in `!include` are resolved relative to the file currently being loaded.
+    Nested includes are supported (loaded file may itself contain `!include`).
+    Matches streamline-card v0.2.2 `!include` semantics (path relative to parent).
+    """
+    y = _make_yaml()
+    y.constructor.add_constructor("!include", _include_constructor)
+    return y
+
+
+def load_streamline_templates(path: str | list[str] | None) -> dict | None:
+    """Load streamline templates YAML.
+
+    `path` may be a single string, or a list of candidate paths. When a list is
+    given, paths are tried in order; the first existing one wins (matches
+    streamline-card's primary + fallback location chain). Returns None if no
+    candidate resolves or the file fails to parse.
+
+    Supports `!include` for splitting templates into multiple files (parity with
+    streamline-card v0.2.2). Paths in `!include` resolve relative to the
+    containing file.
+    """
+    if path is None:
         return None
+    candidates: list[str] = [path] if isinstance(path, str) else list(path)
+    for candidate in candidates:
+        if not candidate:
+            continue
+        try:
+            base_dir = os.path.dirname(candidate)
+            _include_dir_stack.append(base_dir)
+            try:
+                with open(candidate, encoding="utf-8") as f:
+                    return _make_yaml_with_includes().load(f)
+            finally:
+                _include_dir_stack.pop()
+        except FileNotFoundError:
+            continue
+        except Exception:
+            return None
+    return None
 
 
 _MAX_EXPANSION_DEPTH = 10
@@ -196,14 +254,21 @@ def expand_streamline_cards(config, templates: dict, _depth: int = 0):
     if config.get("type") == "custom:streamline-card" and "template" in config:
         template_name = config["template"]
         template_def = templates.get(template_name)
-        if template_def is None or "card" not in template_def:
+        if template_def is None:
+            return config
+
+        # Streamline templates declare their body as either `card:` (normal cards)
+        # or `element:` (picture-elements). The two are mutually exclusive in a
+        # well-formed template; we prefer `card` for compatibility.
+        body_key = "card" if "card" in template_def else "element" if "element" in template_def else None
+        if body_key is None:
             return config
 
         defaults = _normalize_variables(template_def.get("default"))
         card_vars = _normalize_variables(config.get("variables"))
         merged = {**defaults, **card_vars}
 
-        expanded = copy.deepcopy(dict(template_def["card"]))
+        expanded = copy.deepcopy(dict(template_def[body_key]))
         expanded = _substitute_variables(expanded, merged)
         return expand_streamline_cards(expanded, templates, _depth + 1)
 
@@ -214,7 +279,7 @@ def convert_dashboard(
     url: str | None,
     config_dir: str,
     output_dir: str,
-    streamline_templates_path: str | None = None,
+    streamline_templates_path: str | list[str] | None = None,
 ) -> ConvertResult:
     """Convert a single Lovelace dashboard from JSON storage to YAML.
 
@@ -222,6 +287,11 @@ def convert_dashboard(
         url: The dashboard url_path (e.g. "office-panel"), or None for default.
         config_dir: Path to the HA config directory (e.g. /config).
         output_dir: Directory to write YAML output files to.
+        streamline_templates_path: Path (or list of paths to try in order) for
+            the global streamline templates file. Dashboard-local templates
+            declared in `streamline_templates:` at the dashboard config root
+            are also honoured (matching streamline-card's Method 2) and take
+            precedence over the global file on key conflict.
 
     Returns:
         ConvertResult describing success or failure.
@@ -242,8 +312,13 @@ def convert_dashboard(
 
     config = extract_dashboard_config(json_data)
 
-    if streamline_templates_path:
-        templates = load_streamline_templates(streamline_templates_path)
+    # Merge global + dashboard-local templates. Dashboard-local wins on conflict.
+    global_templates = load_streamline_templates(streamline_templates_path) or {}
+    dashboard_templates = config.get("streamline_templates")
+    if isinstance(dashboard_templates, dict) or global_templates:
+        templates = {**global_templates}
+        if isinstance(dashboard_templates, dict):
+            templates.update(dashboard_templates)
         if templates:
             config = expand_streamline_cards(config, templates)
 

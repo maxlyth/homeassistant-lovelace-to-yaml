@@ -1,5 +1,18 @@
 # Changelog
 
+## [0.2.3] - 2026-05-27
+
+### Added — feature parity with streamline-card v0.2.2
+
+- **`!include` tag support** in the templates file. Templates can now be split across multiple files using `!include path/to/template.yaml`. Paths resolve relative to the containing file; nested includes (an included file containing further `!include` directives) are supported. Matches the splitting model documented in [streamline-card v0.2.2](https://github.com/brunosabot/streamline-card/releases/tag/v0.2.2).
+- **`element:` template body** for picture-elements use. Templates declaring `element:` instead of `card:` are now expanded into `picture-elements` parent cards. Previously only `card:` was honoured; templates using `element:` were silently passed through unexpanded.
+- **Dashboard-local `streamline_templates:` block** at the dashboard config root is now honoured (parity with the upstream README's "Method 2" UI workflow). Templates declared inline in a dashboard merge with the global templates file; dashboard-local templates win on key conflict.
+- **Fallback path list** for the global templates file. `streamline_templates_path` (and the `convert_dashboard` argument of the same name) now accepts either a single string or a list of candidate paths. When a list is given, paths are tried in order — the first existing one wins. Matches streamline-card's own primary/fallback location chain (`/config/www/community/streamline-card/...` then `/config/www/streamline-card/...`).
+
+### Added — tests
+
+11 new tests covering: `!include` round-trip, nested `!include`, fallback path resolution (primary wins, all-missing returns None, secondary-when-primary-missing), None path passthrough, `element:` template expansion with variables and defaults, templates lacking both `card` and `element` passing through unchanged, dashboard-local templates expanding correctly, dashboard-local taking precedence on key conflict, and `streamline_templates_path` accepting a fallback list.
+
 ## [0.2.2] - 2026-05-20
 
 ### Fixed

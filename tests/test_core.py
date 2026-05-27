@@ -247,6 +247,121 @@ def test_load_streamline_templates_loads_valid_yaml(tmp_path):
     assert "my_template" in result
 
 
+def test_load_streamline_templates_accepts_none(tmp_path):
+    """None path returns None — for callers passing through optional config."""
+    assert load_streamline_templates(None) is None
+
+
+def test_load_streamline_templates_fallback_list_first_existing_wins(tmp_path):
+    """When passed a list of candidate paths, use the first that exists."""
+    primary = tmp_path / "missing.yaml"
+    secondary = tmp_path / "secondary.yaml"
+    secondary.write_text("from_secondary:\n  card:\n    type: button\n", encoding="utf-8")
+    result = load_streamline_templates([str(primary), str(secondary)])
+    assert result is not None
+    assert "from_secondary" in result
+
+
+def test_load_streamline_templates_fallback_list_none_when_all_missing(tmp_path):
+    result = load_streamline_templates([
+        str(tmp_path / "a.yaml"),
+        str(tmp_path / "b.yaml"),
+    ])
+    assert result is None
+
+
+def test_load_streamline_templates_fallback_primary_wins_when_present(tmp_path):
+    primary = tmp_path / "primary.yaml"
+    primary.write_text("from_primary:\n  card:\n    type: button\n", encoding="utf-8")
+    secondary = tmp_path / "secondary.yaml"
+    secondary.write_text("from_secondary:\n  card:\n    type: button\n", encoding="utf-8")
+    result = load_streamline_templates([str(primary), str(secondary)])
+    assert result is not None
+    assert "from_primary" in result
+    assert "from_secondary" not in result
+
+
+def test_load_streamline_templates_supports_include_tag(tmp_path):
+    """!include resolves relative to the parent file."""
+    sub_dir = tmp_path / "templates"
+    sub_dir.mkdir()
+    (sub_dir / "light.yaml").write_text(
+        "card:\n  type: light\n  entity: '[[entity]]'\n", encoding="utf-8"
+    )
+    (sub_dir / "weather.yaml").write_text(
+        "card:\n  type: weather-forecast\n  entity: '[[entity]]'\n", encoding="utf-8"
+    )
+    main = tmp_path / "streamline_templates.yaml"
+    main.write_text(
+        "light_template: !include templates/light.yaml\n"
+        "weather_template: !include templates/weather.yaml\n",
+        encoding="utf-8",
+    )
+    result = load_streamline_templates(str(main))
+    assert result is not None
+    assert result["light_template"]["card"]["type"] == "light"
+    assert result["weather_template"]["card"]["type"] == "weather-forecast"
+
+
+def test_load_streamline_templates_supports_nested_include(tmp_path):
+    """!include works recursively — an included file can itself !include."""
+    deep = tmp_path / "deep" / "inner.yaml"
+    deep.parent.mkdir(parents=True)
+    deep.write_text(
+        "card:\n  type: button\n  name: deeply nested\n", encoding="utf-8"
+    )
+    mid = tmp_path / "deep" / "outer.yaml"
+    mid.write_text("button_template: !include inner.yaml\n", encoding="utf-8")
+    main = tmp_path / "streamline_templates.yaml"
+    main.write_text("buttons: !include deep/outer.yaml\n", encoding="utf-8")
+    result = load_streamline_templates(str(main))
+    assert result is not None
+    assert result["buttons"]["button_template"]["card"]["name"] == "deeply nested"
+
+
+# ── element: template body (parity with streamline-card picture-elements) ────
+
+def test_expand_streamline_cards_supports_element_template_body():
+    """Templates declaring `element:` instead of `card:` expand for picture-elements."""
+    templates = {
+        "icon_element_template": {
+            "default": [{"icon_color": "white"}],
+            "element": {
+                "type": "icon",
+                "icon": "[[icon]]",
+                "style": {"color": "[[icon_color]]"},
+            },
+        },
+    }
+    config = {
+        "type": "picture-elements",
+        "image": "/local/floorplan.png",
+        "elements": [
+            {
+                "type": "custom:streamline-card",
+                "template": "icon_element_template",
+                "variables": [{"icon": "mdi:lightbulb"}],
+            }
+        ],
+    }
+    expanded = expand_streamline_cards(config, templates)
+    assert expanded["elements"][0]["type"] == "icon"
+    assert expanded["elements"][0]["icon"] == "mdi:lightbulb"
+    assert expanded["elements"][0]["style"]["color"] == "white"
+
+
+def test_expand_streamline_cards_template_without_card_or_element_passes_through():
+    """Malformed template (neither card nor element) is left untouched."""
+    templates = {"broken_template": {"default": [{"x": 1}]}}
+    config = {
+        "type": "custom:streamline-card",
+        "template": "broken_template",
+    }
+    expanded = expand_streamline_cards(config, templates)
+    assert expanded["type"] == "custom:streamline-card"
+    assert expanded["template"] == "broken_template"
+
+
 # ── convert_dashboard ─────────────────────────────────────────────────────────
 
 def test_convert_dashboard_named(config_dir, output_dir):
@@ -561,3 +676,75 @@ def test_convert_dashboard_is_idempotent(config_dir, output_dir):
     assert result1.success and result2.success
     assert result1.output_path == result2.output_path
     assert content1 == content2
+
+
+def test_convert_dashboard_uses_dashboard_local_templates(tmp_path, output_dir):
+    """`streamline_templates:` at dashboard config root is honoured (parity Method 2)."""
+    # Build a minimal HA config dir with a registry + storage file containing
+    # a dashboard-local streamline_templates block.
+    storage = tmp_path / ".storage"
+    storage.mkdir()
+    (storage / "lovelace_dashboards").write_text(json.dumps({
+        "data": {"items": [{"url_path": "local", "title": "Local", "icon": "mdi:home", "show_in_sidebar": True, "require_admin": False, "mode": "storage", "id": "local"}]},
+        "key": "lovelace_dashboards", "version": 1,
+    }))
+    (storage / "lovelace.local").write_text(json.dumps({
+        "data": {"config": {
+            "streamline_templates": {
+                "local_btn": {"card": {"type": "button", "name": "[[label]]"}},
+            },
+            "views": [{
+                "title": "v",
+                "cards": [
+                    {"type": "custom:streamline-card", "template": "local_btn",
+                     "variables": [{"label": "Hello"}]},
+                ],
+            }],
+        }},
+        "key": "lovelace.local", "version": 1,
+    }))
+    result = convert_dashboard("local", str(tmp_path), output_dir)
+    assert result.success, result.error
+    content = open(result.output_path, encoding="utf-8").read()
+    parsed = ruamel.yaml.YAML().load(content)
+    assert parsed["views"][0]["cards"][0]["type"] == "button"
+    assert parsed["views"][0]["cards"][0]["name"] == "Hello"
+
+
+def test_convert_dashboard_local_templates_override_global(tmp_path, output_dir):
+    """Dashboard-local template wins on key conflict with global file."""
+    storage = tmp_path / ".storage"
+    storage.mkdir()
+    (storage / "lovelace_dashboards").write_text(json.dumps({
+        "data": {"items": [{"url_path": "local", "title": "Local", "icon": "mdi:home", "show_in_sidebar": True, "require_admin": False, "mode": "storage", "id": "local"}]},
+        "key": "lovelace_dashboards", "version": 1,
+    }))
+    (storage / "lovelace.local").write_text(json.dumps({
+        "data": {"config": {
+            "streamline_templates": {
+                "shared": {"card": {"type": "button", "name": "from-dashboard"}},
+            },
+            "views": [{
+                "cards": [{"type": "custom:streamline-card", "template": "shared"}],
+            }],
+        }},
+        "key": "lovelace.local", "version": 1,
+    }))
+    global_templates = tmp_path / "global.yaml"
+    global_templates.write_text(
+        "shared:\n  card:\n    type: button\n    name: from-global\n", encoding="utf-8"
+    )
+    result = convert_dashboard("local", str(tmp_path), output_dir, streamline_templates_path=str(global_templates))
+    assert result.success
+    content = open(result.output_path, encoding="utf-8").read()
+    parsed = ruamel.yaml.YAML().load(content)
+    assert parsed["views"][0]["cards"][0]["name"] == "from-dashboard"
+
+
+def test_convert_dashboard_accepts_fallback_list(config_dir, output_dir, streamline_templates_path):
+    """`streamline_templates_path` accepts a list of fallback paths."""
+    result = convert_dashboard(
+        "map", config_dir, output_dir,
+        streamline_templates_path=["/nonexistent.yaml", streamline_templates_path],
+    )
+    assert result.success
